@@ -18,9 +18,11 @@ from tqdm import tqdm
 # @param in_tuple: instance_id: int, memsize: int, design_name: str, check_pc_spike_again: bool, randseed: int, nmax_bbs: int, authorize_privileges: bool, outdir_path: str
 def __gen_elf_worker(in_tuple):
     instance_id, memsize, design_name, randseed, nmax_bbs, authorize_privileges, check_pc_spike_again, outdir_path = in_tuple
-    fuzzerstate, elfpath, _, _, _, _ = gen_fuzzerstate_elf_expectedvals(memsize, design_name, randseed, nmax_bbs, authorize_privileges, check_pc_spike_again)
+    fuzzerstate, elfpath, _, _, _, _, rtl_nbfpath, rtl_riscvpath = gen_fuzzerstate_elf_expectedvals(memsize, design_name, randseed, nmax_bbs, authorize_privileges, check_pc_spike_again)
     # Move the file from elfpath to outdir_path, and name it after the design name and instance id.
     shutil.move(elfpath, os.path.join(outdir_path, f"{design_name}_{instance_id}.elf"))
+    shutil.move(rtl_nbfpath, os.path.join(outdir_path, f"{design_name}_{instance_id}.nbf"))
+    shutil.move(rtl_riscvpath, os.path.join(outdir_path, f"{design_name}_{instance_id}.riscv"))
 
     # Write the end address (where spike will fail), for further analysis.
     with open(os.path.join(outdir_path, f"{design_name}_{instance_id}_finaladdr.txt"), "w") as f:

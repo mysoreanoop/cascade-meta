@@ -31,10 +31,13 @@ def gen_regdump_reqs(fuzzerstate):
 
             # All we need is the value of the dependent register at consumption time.
             if isinstance(bb_instr, PlaceholderConsumerInstr):
+                #print('found a placeholderconsumerinsn; dumping (curr_addr, False, bb_instr.rdep) =', (hex(curr_addr), False, bb_instr.rdep) )
                 ret.append((curr_addr, False, bb_instr.rdep))
             # For branches, we need to know the val of both operands to generate a suitable opcode later.
             if isinstance(bb_instr, BranchInstruction):
                 # if not bb_instr.plan_taken:
+                #print('found a placeholderbranchinsn; dumping (curr_addr, False, bb_instr.rs1, rs2) =', (hex(curr_addr), False, bb_instr.rs1, bb_instr.rs2) )
+
                 ret.append((curr_addr, False, bb_instr.rs1)) # rs1 is the first  dependent register.
                 ret.append((curr_addr, False, bb_instr.rs2)) # rs2 is the second dependent register.
     return ret
@@ -169,7 +172,8 @@ def _feed_regdump_to_instrs(fuzzerstate, regdumps: list):
                 # if DO_ASSERT:
                 #     if fuzzerstate.is_design_64bit:
                 #         assert regdumps[index_in_regdump] < 1 << 30, f"For more efficient offset generation, we ask the dependent register to be strictly less than 1 << 30. This is typically ensured by the pre-consumer. Producer id: {bb_instr.producer_id}"
-
+                #print('RESOLVING @ ')
+                #print('RESOLVING @ ', hex(curr_addr), regdumps[index_in_regdump])
                 producer_id_to_rdepval[bb_instr.producer_id] = regdumps[index_in_regdump]
                 index_in_regdump += 1
 
@@ -182,6 +186,8 @@ def _feed_regdump_to_instrs(fuzzerstate, regdumps: list):
                 index_in_regdump += 1
                 # Now, we can redetermine the branch opcode depending on the register values
                 bb_instr.select_suitable_opcode(branch_rs1_content, branch_rs2_content)
+                #print('RESOLVING BRANCH @ ', hex(curr_addr), hex(branch_rs1_content), hex(branch_rs2_content))
+
 
     # Feed the consumer-level information into the producers
     for bb_instrlist in fuzzerstate.instr_objs_seq:
@@ -198,14 +204,17 @@ def _transmit_addrs_to_producers_for_spike_resolution(fuzzerstate):
     for bb_instrlist in fuzzerstate.instr_objs_seq:
         for bb_instr in bb_instrlist:
             if isinstance(bb_instr, PlaceholderProducerInstr0):
+                #print ("Trying to resolve", bb_instr, bb_instr.producer_id)
                 if bb_instr.producer_id not in fuzzerstate.producer_id_to_tgtaddr:
+                    #print('Not in')
                     # We cannot provide a totally random value in all cases. Some CSRs will not tolerate it.
                     # So far, I think the only CSR that does not tolerate random values and that has a producer id is tvec.
                     # In the future, we may want to check the type of instruction that has this producer id
                     fuzzerstate.producer_id_to_tgtaddr[bb_instr.producer_id] = random.randrange(1 << 30) << 2
                 bb_instr.spike_resolution_offset = fuzzerstate.producer_id_to_tgtaddr[bb_instr.producer_id]
+                #print('Spike resolution offset: ', hex(bb_instr.spike_resolution_offset))
             elif isinstance(bb_instr, PlaceholderProducerInstr1):
-                # print('Determ for prod id', bb_instr.producer_id, hex(fuzzerstate.producer_id_to_tgtaddr[bb_instr.producer_id]))
+                #print('Determ for prod id', bb_instr.producer_id, hex(fuzzerstate.producer_id_to_tgtaddr[bb_instr.producer_id]))
                 bb_instr.spike_resolution_offset = fuzzerstate.producer_id_to_tgtaddr[bb_instr.producer_id]
 
 # Check that the PC trace from spike matches with the expected PC trace
@@ -214,6 +223,7 @@ def _check_pc_trace_from_spike(fuzzerstate, spike_pc_seq):
     curr_id_in_spike_pc_seq = 0
     prev_pc = -1
     id_in_spike_pc_seq = 0
+    #print( 'Expected spike PC sequence: ', '\n'.join([hex(i) for i in spike_pc_seq]))
     for bb_id, bb_instrlist in enumerate(fuzzerstate.instr_objs_seq):
         for bb_instr_id, bb_instr in enumerate(bb_instrlist):
             spike_pc = spike_pc_seq[curr_id_in_spike_pc_seq]
@@ -237,12 +247,13 @@ def spike_resolution(fuzzerstate, check_pc_spike_again: bool = False):
     design_name = fuzzerstate.design_name
     _transmit_addrs_to_producers_for_spike_resolution(fuzzerstate)
     # print('start addrs', list(map(hex, fuzzerstate.bb_start_addr_seq)))
-    spike_resolution_elfpath = gen_elf_from_bbs(fuzzerstate, True, 'spikeresol', fuzzerstate.instance_to_str(), SPIKE_STARTADDR)
+    spike_resolution_elfpath, _, _ = gen_elf_from_bbs(fuzzerstate, True, 'spikeresol', fuzzerstate.instance_to_str(), SPIKE_STARTADDR)
     # print('Spike resolution elfpath:', spike_resolution_elfpath)
     regdump_reqs = gen_regdump_reqs(fuzzerstate)
     flat_instr_objs = list(itertools.chain.from_iterable(fuzzerstate.instr_objs_seq))
     # len(flat_instr_objs)+1: the +1 is to reach the final basic block and thereby overwrite the potential destination register of a jal/jalr
     regvals, (finalintregvals_spikeresol, finalfpuregvals_spikeresol) = run_trace_regs_at_pc_locs(fuzzerstate.instance_to_str(), spike_resolution_elfpath, get_design_march_flags_nocompressed(design_name), SPIKE_STARTADDR, regdump_reqs, True, fuzzerstate.final_bb_base_addr+SPIKE_STARTADDR, fuzzerstate.num_pickable_floating_regs if fuzzerstate.design_has_fpu else 0, fuzzerstate.design_has_fpud)
+    #print ('RESOLVED: ', )
     if not NO_REMOVE_TMPFILES:
         os.remove(spike_resolution_elfpath)
         del spike_resolution_elfpath
@@ -254,8 +265,9 @@ def spike_resolution(fuzzerstate, check_pc_spike_again: bool = False):
 
     # Use spike to check the rtl elf if requested
     if check_pc_spike_again:
+        print('Checking again')
         # Generate the RTL ELF, but located for spike at SPIKE_STARTADDR
-        rtl_spike_elfpath = gen_elf_from_bbs(fuzzerstate, False, 'spikedoublecheck', fuzzerstate.instance_to_str(), SPIKE_STARTADDR)
+        rtl_spike_elfpath, _, _ = gen_elf_from_bbs(fuzzerstate, False, 'spikedoublecheck', fuzzerstate.instance_to_str(), SPIKE_STARTADDR)
         if NO_REMOVE_TMPFILES:
             print('rtl_spike_elfpath:', rtl_spike_elfpath)
         rtl_spike_pc_seq, (finalintregvals_spikecheck, finalfpuregvals_spikecheck) = run_trace_all_pcs(fuzzerstate.instance_to_str(), rtl_spike_elfpath, get_design_march_flags_nocompressed(design_name), len(flat_instr_objs)+1, SPIKE_STARTADDR, True,  fuzzerstate.num_pickable_floating_regs if fuzzerstate.design_has_fpu else 0, fuzzerstate.design_has_fpud, fuzzerstate)

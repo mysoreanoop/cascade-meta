@@ -57,6 +57,7 @@ def __get_all_regs_from_spike_out(spike_out: str, is_design_64bit: bool):
 def __gen_spike_dbgcmd_file_for_trace_regs_at_pc_locs(identifier_str: str, startpc: int, regdump_reqs, dump_final_reg_vals: bool, final_addr: int, num_fp_regs: int, dump_freg_format: str = ''):
     assert not dump_freg_format # This assertion is to check whether we actually can remove dump_freg_format.
     path_to_debug_file = os.path.join(PATH_TO_TMP, 'dbgcmds', f"cmds_trace_regs_at_pc_locs_{identifier_str}")
+    #print ('Debug file path: ', path_to_debug_file)
     # if not os.path.exists(path_to_debug_file):
     Path(os.path.dirname(path_to_debug_file)).mkdir(parents=True, exist_ok=True)
     spike_debug_commands = [
@@ -87,7 +88,6 @@ def __gen_spike_dbgcmd_file_for_trace_regs_at_pc_locs(identifier_str: str, start
 
     with open(path_to_debug_file, 'w') as f:
         f.write(spike_debug_commands_str)
-
     return path_to_debug_file
 
 # @brief Generate the spike debug command file (as understood by spike --debug-cmd) and returns its path.
@@ -113,7 +113,6 @@ def __gen_spike_dbgcmd_file_for_trace_pcs(identifier_str: str, numinstrs: int, s
 
     with open(path_to_debug_file, 'w') as f:
         f.write(spike_debug_commands_str)
-
     return path_to_debug_file
 
 ###
@@ -140,7 +139,7 @@ def run_trace_regs_at_pc_locs(identifier_str: str, elfpath: str, rvflags: str, s
         f"--pc={startpc}",
         elfpath
     )
-
+    #print (spike_shell_command)
     try:
         spike_out = subprocess.run(spike_shell_command, capture_output=True, timeout=get_spike_timeout_seconds()).stderr
     except Exception as e:
@@ -193,9 +192,11 @@ def run_trace_all_pcs(identifier_str: str, elfpath: str, rvflags: str, numinstrs
     path_to_debug_file = __gen_spike_dbgcmd_file_for_trace_pcs(identifier_str, numinstrs, startpc, dump_final_reg_vals, num_fp_regs)
     
     # Second, run the Spike command
+    #print ('Running doublecheck with log:')
     spike_shell_command = (
         "spike",
         "-d",
+        "-l",
         f"--debug-cmd={path_to_debug_file}",
         f"--isa={rvflags}",
         f"--pc={startpc}",

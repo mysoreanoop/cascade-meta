@@ -33,23 +33,29 @@ def runsim_verilator(design_name, simlen, elfpath, num_int_regs: int = MAX_NUM_P
 
     design_cfg       = designcfgs.get_design_cfg(design_name)
     cascadedir       = designcfgs.get_design_cascade_path(design_name)
-    builddir         = os.path.join(cascadedir,'build')
+    builddir         = 'verilator' if design_name == 'bp' else os.path.join(cascadedir,'build')
 
     my_env = setup_sim_env(elfpath, '/dev/null', '/dev/null', simlen, cascadedir, coveragepath, False)
 
-    simdir               = f"run_{'coverage' if coveragepath else 'rfuzz' if get_rfuzz_coverage_mask else 'vanilla'}_notrace_0.1"
-    verilatordir         = 'default-verilator'
+    simdir               = 'obj_dir' if design_name == 'bp' else f"run_{'coverage' if coveragepath else 'rfuzz' if get_rfuzz_coverage_mask else 'vanilla'}_notrace_0.1"
+    verilatordir         = '' if design_name == 'bp' else 'default-verilator'
     verilator_executable = 'V%s' % design_cfg['toplevel']
     sim_executable_path  = os.path.abspath(os.path.join(builddir, simdir, verilatordir, verilator_executable))
 
     # Run Verilator
-    exec_out = subprocess.run([sim_executable_path], check=True, text=True, capture_output=True, env=my_env)
+    print('Running subprocess:', sim_executable_path)
+    exec_out = subprocess.run([sim_executable_path, elfpath, 1, elfpath.replace("nbf", "riscv"), 0, 10, '+bsg_trace'], check=True, text=True, stdout=subprocess.PIPE, env=my_env) if design_name != 'bp' else \
+        subprocess.run([sim_executable_path, os.path.abspath(elfpath), '0', '0', '0', '0'], check=False, text=True, capture_output=True)
+    #print(exec_out)
     outlines = list(filter(lambda l: 'Writing ELF word to' not in l, exec_out.stdout.split('\n')))
 
     # Check stop success
-    is_stop_successful = 'Found a stop request.' in exec_out.stdout
+    is_stop_successful = ('Found a stop request.' if design_name != 'bp' else 'DEBUG-PS: data 902') in exec_out.stdout
     if not is_stop_successful:
+        print ('Simulation did not terminate')
         return False, None
+    else:
+        print ('Simulation terminated properly')
 
     # Retrieve the register values
     ret_intregs = []
@@ -161,6 +167,7 @@ def runtest_simulator(fuzzerstate, elfpath: str, expected_regvals: tuple, overri
             assert len(expected_floatregvals) == fuzzerstate.num_pickable_floating_regs
     num_instrs = override_num_instrs if override_num_instrs is not None else len(list(itertools.chain.from_iterable(fuzzerstate.instr_objs_seq)))
     if simulator == SimulatorEnum.VERILATOR:
+        print('Running verilator')
         is_stop_successful, received_regvals = runsim_verilator(fuzzerstate.design_name, num_instrs*MAX_CYCLES_PER_INSTR + SETUP_CYCLES, elfpath, fuzzerstate.num_pickable_regs-1, fuzzerstate.num_pickable_floating_regs)
     elif simulator == SimulatorEnum.MODELSIM:
         is_stop_successful, received_regvals = runsim_modelsim(fuzzerstate.design_name, num_instrs*MAX_CYCLES_PER_INSTR + SETUP_CYCLES, elfpath, fuzzerstate.num_pickable_regs-1, fuzzerstate.num_pickable_floating_regs)
@@ -216,6 +223,7 @@ def runtest_verilator_forprofiling(fuzzerstate, elfpath: str, expected_fuzzersta
         assert len(fuzzerstate.instr_objs_seq) == expected_fuzzerstate_len_fordebug, f"Unexpected length of fuzzerstate: {len(fuzzerstate.instr_objs_seq)}"
     is_stop_successful, received_regvals = runsim_verilator(fuzzerstate.design_name, len(fuzzerstate.instr_objs_seq[0])*MAX_CYCLES_PER_INSTR + SETUP_CYCLES, elfpath, 1, 0)
     # Check successful stop
+    print(elfpath)
     if not is_stop_successful:
         raise Exception(f"Timeout during profiling of design `{fuzzerstate.design_name}`.")
     # Check that we retrieved the regs correctly

@@ -248,18 +248,21 @@ def create_regfsm_instrobjs(fuzzerstate):
         raise ValueError(f"Unexpected choice: `{choice}`.")
 
 def create_targeted_producer0_instrobj(fuzzerstate):
+    #print('TARGET1')
     fuzzerstate.next_producer_id += 1
     rd = fuzzerstate.intregpickstate.pick_int_outputreg_nonzero(False)
     fuzzerstate.intregpickstate.set_producer_id(rd, fuzzerstate.next_producer_id)
-    # fuzzerstate.intregpickstate.set_producer1_location(rd, len(fuzzerstate.instr_objs_seq), len(fuzzerstate.instr_objs_seq[0])) # Optimization currently unused
+    fuzzerstate.intregpickstate.set_producer1_location(rd, len(fuzzerstate.instr_objs_seq), len(fuzzerstate.instr_objs_seq[0])) # Optimization currently unused
     fuzzerstate.intregpickstate.set_regstate(rd, IntRegIndivState.PRODUCED0)
     return [PlaceholderProducerInstr0(rd, fuzzerstate.next_producer_id, fuzzerstate.is_design_64bit)]
 def create_targeted_producer1_instrobj(fuzzerstate):
+    #print('TARGET2')
     rd = fuzzerstate.intregpickstate.pick_int_reg_in_state(IntRegIndivState.PRODUCED0)
     # fuzzerstate.intregpickstate.set_producer1_location(rd, len(fuzzerstate.instr_objs_seq), len(fuzzerstate.instr_objs_seq[0])) # Optimization currently unused
     fuzzerstate.intregpickstate.set_regstate(rd, IntRegIndivState.PRODUCED1)
     return [PlaceholderProducerInstr1(rd, fuzzerstate.intregpickstate.get_producer_id(rd), fuzzerstate.is_design_64bit)]
 def create_targeted_consumer_instrobj(fuzzerstate):
+    #print('TARGET3')
     rdep = fuzzerstate.intregpickstate.pick_int_inputreg_nonzero(False) # We want to create dependencies, therefore we choose not to accept x0
     rprod = fuzzerstate.intregpickstate.pick_int_reg_in_state(IntRegIndivState.PRODUCED1)
     # WARNING: We CANNOT throw a PRODUCEDX into the nature because its value will change between spike and RTL.

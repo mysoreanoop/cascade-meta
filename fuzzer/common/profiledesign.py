@@ -40,7 +40,6 @@ def __gen_medeleg_profiling_snippet(design_name: str):
 
     # We use the fuzzerstate for convenience but use very few of its features for this function's purposes. In particular, we do not bother about memviews.
     fuzzerstate = FuzzerState(get_design_boot_addr(design_name), design_name, 1 << 16, 0, 1, True)
-
     fuzzerstate.reset()
     fuzzerstate.init_new_bb() # Update fuzzer state to support a new basic block
 
@@ -76,8 +75,8 @@ def __gen_medeleg_profiling_snippet(design_name: str):
 def __get_medeleg_mask(design_name: str):
     # The fuzzerstate contains the snippet that dumps a register value of 1 if an exception occurred, else a value of 0
     fuzzerstate = __gen_medeleg_profiling_snippet(design_name)
-    rtl_elfpath = gen_elf_from_bbs(fuzzerstate, False, 'medelegprofiling', design_name, fuzzerstate.design_base_addr)
-    return runtest_verilator_forprofiling(fuzzerstate, rtl_elfpath, 1)
+    rtl_elfpath, rtl_nbfpath, rtl_riscvpath = gen_elf_from_bbs(fuzzerstate, False, 'medelegprofiling', design_name, fuzzerstate.design_base_addr)
+    return runtest_verilator_forprofiling(fuzzerstate, rtl_nbfpath if fuzzerstate.design_name == 'bp' else rtl_elfpath, 1)
 
 ###
 # Exposed functions
@@ -89,7 +88,7 @@ def profile_get_medeleg_mask(design_name: str):
     if "picorv32" in design_name:
         return 0 # This design does not support medeleg
     global PROFILED_MEDELEG_MASK
-    PROFILED_MEDELEG_MASK = __get_medeleg_mask(design_name)
+    PROFILED_MEDELEG_MASK = 46079 if design_name == 'bp' else __get_medeleg_mask(design_name) #46079 (in int) for BP
 
 # @return the mask of medeleg bits that are supported by the design
 def get_medeleg_mask(design_name: str):

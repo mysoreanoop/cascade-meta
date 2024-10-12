@@ -15,14 +15,13 @@ if __name__ == '__main__':
     if "CASCADE_ENV_SOURCED" not in os.environ:
         raise Exception("The Cascade environment must be sourced prior to running the Python recipes.")
 
-    design_name = 'boom'
-    descriptor = (881540, design_name, 5000017, 51, True)
+    design_name = 'bp'
+    descriptor = (881540, design_name, 51, 1, True)
 
     # tolerate_bug_for_eval_reduction(design_name)
-
     calibrate_spikespeed()
     profile_get_medeleg_mask(design_name)
-
+    print ('Got medeleg mask; fuzzing now...')
     fuzz_single_from_descriptor(*descriptor, check_pc_spike_again=True)
 
 else:

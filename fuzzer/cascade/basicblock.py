@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 # This script is responsible for generating the basic blocks
-
 from params.runparams import DO_ASSERT
 from common.spike import SPIKE_STARTADDR
 from rv.csrids import CSR_IDS
@@ -22,7 +21,6 @@ from cascade.finalblock import get_finalblock_max_size,finalblock
 from cascade.initialblock import gen_initial_basic_block
 from cascade.blacklist import blacklist_changing_instructions, blacklist_final_block, blacklist_context_setter
 from cascade.privilegestate import PrivilegeStateEnum
-
 import random
 
 # Given the provided control flow instruction, finds a location for a new block, but does not allocate it.
@@ -48,7 +46,6 @@ def gen_basicblock(fuzzerstate):
 
     # We stop the instruction generation either when there is no more space available, or when we encounter an end-of-state instruction
     while fuzzerstate.memview.get_available_contig_space(curr_alloc_cursor)-4 > BASIC_BLOCK_MIN_SPACE:
-
         # Allocate the next 4 bytes
         fuzzerstate.memview.alloc_mem_range(curr_alloc_cursor, curr_alloc_cursor+4)
         curr_alloc_cursor += 4
@@ -59,7 +56,6 @@ def gen_basicblock(fuzzerstate):
             curr_isa_class = ISAInstrClass.JAL
         else:
             curr_isa_class = gen_next_isainstrclass(fuzzerstate)
-
         # If this is an instruction that influences offset register states
         if curr_isa_class == ISAInstrClass.REGFSM:
             new_instrobjs = create_regfsm_instrobjs(fuzzerstate)
@@ -497,7 +493,6 @@ def gen_basicblocks(fuzzerstate):
         fuzzerstate.memstorestate.init_store_locations(fuzzerstate.num_store_locations, fuzzerstate.memview)
 
         while True:
-            # print('len(fuzzerstate.instr_objs_seq)', len(fuzzerstate.instr_objs_seq))
             gen_basicblock(fuzzerstate)
             if fuzzerstate.next_bb_addr is None:
                 # This corresponds to failing to find space for a new basic block. In this case, this block may also not have completed, and we drop it.

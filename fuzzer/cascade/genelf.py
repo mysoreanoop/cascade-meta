@@ -7,9 +7,12 @@
 from params.runparams import DO_ASSERT, PATH_TO_TMP
 from common.bytestoelf import gen_elf
 from cascade.finalblock import finalblock_spike_resolution
+from common import nbf
 
 from collections import defaultdict
 import os
+import subprocess
+import sys
 
 # From a fuzzerstate, generates an ELF, may it be for spike resolution or for RTL simulation
 # Also integrates the final block.
@@ -79,7 +82,25 @@ def gen_elf_from_bbs(fuzzerstate, is_spike_resolution, prefixname: str, test_ide
     curr_bytes = bytes(curr_bytearray)
 
     elfpath = os.path.join(PATH_TO_TMP, f"{prefixname}{test_identifier}.elf")
-
     # Generate the ELF object
     gen_elf(curr_bytes, start_addr=fuzzerstate.bb_start_addr_seq[0], section_addr=start_addr, destination_path=elfpath, is_64bit=fuzzerstate.is_design_64bit)
-    return elfpath
+
+    #print (elfpath)
+    mem_file = elfpath[:-4] + '.mem'
+    nbf_file = elfpath[:-4] + '.nbf'
+    riscv_file = elfpath[:-4] + '.riscv'
+    f = open(nbf_file, 'w') 
+    # Convert to NBF for BP
+    if fuzzerstate.design_name == 'bp':
+        if subprocess.run(['/home/mysanoop/zynq-farm/latest/zynq-parrot/software/import/black-parrot-sdk/install/bin/riscv64-unknown-elf-dramfs-objcopy', '-O', 'verilog', elfpath, mem_file]):
+            converter = nbf.NBF(1, '', mem_file, 16, '', True, True, 40, 64, '0x80000000', False, False)
+            orig_stdout = sys.stdout
+            sys.stdout = f
+            converter.dump()
+            sys.stdout = orig_stdout
+        else:
+            assert False, 'Did not generate NBF path'
+
+    gen_elf(curr_bytes, start_addr=fuzzerstate.bb_start_addr_seq[0], section_addr=0x8000_0000, destination_path=elfpath[:-4] + '.riscv', is_64bit=fuzzerstate.is_design_64bit)
+
+    return elfpath, nbf_file if fuzzerstate.design_name == 'bp' else 'dummy', riscv_file if fuzzerstate.design_name == 'bp' else 'dummy'

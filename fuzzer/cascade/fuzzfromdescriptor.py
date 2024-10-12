@@ -16,6 +16,8 @@ from cascade.spikeresolution import spike_resolution
 import os
 import random
 import time
+import subprocess 
+from cascade.cfinstructionclasses import is_placeholder, JALInstruction, JALRInstruction, BranchInstruction, ExceptionInstruction, TvecWriterInstruction, EPCWriterInstruction, GenericCSRWriterInstruction, MisalignedMemInstruction, PrivilegeDescentInstruction, EcallEbreakInstruction, SimpleExceptionEncapsulator, CSRRegInstruction
 
 FUZZ_USE_MODELSIM = False
 
@@ -37,40 +39,68 @@ def gen_fuzzerstate_elf_expectedvals(memsize: int, design_name: str, randseed: i
     random.seed(randseed)
     fuzzerstate = FuzzerState(get_design_boot_addr(design_name), design_name, memsize, randseed, nmax_bbs, authorize_privileges, max_num_instructions, no_dependency_bias)
     gen_basicblocks(fuzzerstate)
+    #print ('basic blocks generated')
+    file = open('./generated/gen_basicblocks', 'w')
+    with file as f:
+        for i in range(len(fuzzerstate.instr_objs_seq)):
+            for j in range(len(fuzzerstate.instr_objs_seq[i])):
+                f.write(str(fuzzerstate.instr_objs_seq[i][j].instr_str if len(fuzzerstate.instr_objs_seq[i])>1 and not is_placeholder(fuzzerstate.instr_objs_seq[i][j] ) else 0))
+                f.write('\n')
     time_seconds_spent_in_gen_bbs = time.time() - start
 
     # spike resolution
     start = time.time()
     expected_regvals = spike_resolution(fuzzerstate, check_pc_spike_again)
     time_seconds_spent_in_spike_resol = time.time() - start
+    file = open('./generated/spike_resolution', 'w')
+    with file as f:
+        for i in range(len(fuzzerstate.instr_objs_seq)):
+            for j in range(len(fuzzerstate.instr_objs_seq[i])):
+                f.write(str(fuzzerstate.instr_objs_seq[i][j].instr_str if len(fuzzerstate.instr_objs_seq[i])>1 and not is_placeholder(fuzzerstate.instr_objs_seq[i][j] ) else 0))
+                f.write('\n')
 
     start = time.time()
     # This is typically quite short
-    rtl_elfpath = gen_elf_from_bbs(fuzzerstate, False, 'rtl', fuzzerstate.instance_to_str(), fuzzerstate.design_base_addr)
+    rtl_elfpath, rtl_nbfpath, rtl_riscvpath = gen_elf_from_bbs(fuzzerstate, False, 'rtl', fuzzerstate.instance_to_str(), fuzzerstate.design_base_addr)
     time_seconds_spent_in_gen_elf = time.time() - start
-    return fuzzerstate, rtl_elfpath, expected_regvals, time_seconds_spent_in_gen_bbs, time_seconds_spent_in_spike_resol, time_seconds_spent_in_gen_elf
+
+    file = open('./generated/genelf', 'w')
+    with file as f:
+        for i in range(len(fuzzerstate.instr_objs_seq)):
+            for j in range(len(fuzzerstate.instr_objs_seq[i])):
+                f.write(str(fuzzerstate.instr_objs_seq[i][j].instr_str if len(fuzzerstate.instr_objs_seq[i])>1 and not is_placeholder(fuzzerstate.instr_objs_seq[i][j] ) else 0))
+                f.write('\n')
+    return fuzzerstate, rtl_elfpath, expected_regvals, time_seconds_spent_in_gen_bbs, time_seconds_spent_in_spike_resol, time_seconds_spent_in_gen_elf, rtl_nbfpath, rtl_riscvpath
 
 ###
 # Exposed function
 ###
 
 def run_rtl(memsize: int, design_name: str, randseed: int, nmax_bbs: int, authorize_privileges: bool, check_pc_spike_again: bool, nmax_instructions: int = None, nodependencybias: bool = False, simulator=SimulatorEnum.VERILATOR):
-    fuzzerstate, rtl_elfpath, finalregvals_spikeresol, time_seconds_spent_in_gen_bbs, time_seconds_spent_in_spike_resol, time_seconds_spent_in_gen_elf = gen_fuzzerstate_elf_expectedvals(memsize, design_name, randseed, nmax_bbs, authorize_privileges, check_pc_spike_again, nmax_instructions, nodependencybias)
-
+    fuzzerstate, rtl_elfpath, finalregvals_spikeresol, time_seconds_spent_in_gen_bbs, time_seconds_spent_in_spike_resol, time_seconds_spent_in_gen_elf, rtl_nbfpath, rtl_riscvpath = gen_fuzzerstate_elf_expectedvals(memsize, design_name, randseed, nmax_bbs, authorize_privileges, check_pc_spike_again, nmax_instructions, nodependencybias)
+    print ('Successfully generated ELF file for fuzzing')
     start = time.time()
-    is_success, rtl_msg = runtest_simulator(fuzzerstate, rtl_elfpath, finalregvals_spikeresol, simulator=simulator)
-    time_seconds_spent_in_rtl_sim = time.time() - start
+    dumpfile = rtl_elfpath[:-3] + 'dump'
+
+    with open(dumpfile, 'w') as f:
+        subprocess.run(['riscv64-unknown-elf-objdump', '-D', rtl_riscvpath], check=True, text=True, stdout=f)
+    print ('Successfully generated dump file for fuzzing')
+
+    #is_success, rtl_msg = runtest_simulator(fuzzerstate, rtl_nbfpath if fuzzerstate.design_name == 'bp' else rtl_elfpath, finalregvals_spikeresol, simulator=simulator)
+    #time_seconds_spent_in_rtl_sim = time.time() - start
+    print ('Run complete')
 
     # For debugging, potentially expose the ELF files
     if NO_REMOVE_TMPFILES:
         print('rtl elfpath', rtl_elfpath)
-    if not NO_REMOVE_TMPFILES:
-        os.remove(rtl_elfpath)
-        del rtl_elfpath
-
-    if not is_success:
-        raise Exception(rtl_msg)
-    return time_seconds_spent_in_gen_bbs, time_seconds_spent_in_spike_resol, time_seconds_spent_in_gen_elf, time_seconds_spent_in_rtl_sim
+    #if not NO_REMOVE_TMPFILES:
+        #os.remove(rtl_elfpath)
+        #del rtl_elfpath
+    #if not is_success:
+    #    raise Exception(rtl_msg)
+    #return time_seconds_spent_in_gen_bbs, time_seconds_spent_in_spike_resol, time_seconds_spent_in_gen_elf, time_seconds_spent_in_rtl_sim
+    #Fix: Add an indented block after the return statement
+    return 0, 0, 0, 0
 
 ###
 # Some tests

@@ -172,6 +172,8 @@ def get_design_prettyname(design_name):
         return "Rocket"
     elif design_name == "boom":
         return "BOOM"
+    elif design_name == "bp":
+        return "BlackParrot"
     else:
         raise NotImplementedError(f"get_design_prettyname not implemented for design `{design_name}`.")
         return design_name
